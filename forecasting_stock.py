@@ -13,11 +13,18 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import plotly.graph_objs as go
-from pmdarima import auto_arima
 from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.forecasting.theta import ThetaModel
 import random
+
+# Conditional import for auto_arima
+try:
+    from pmdarima import auto_arima
+    auto_arima_available = True
+except ImportError:
+    auto_arima_available = False
+    st.warning("pmdarima (auto_arima) is not available. Some functionality may be limited.")
 
 # List of 25 US stock exchange tickers and 25 Indian NS tickers
 us_tickers = ['AAPL', 'MSFT', 'AMZN', 'GOOGL', 'FB', 'TSLA', 'BRK-B', 'JPM', 'JNJ', 'V', 'PG', 'UNH', 'MA', 'NVDA', 'HD', 'DIS', 'BAC', 'ADBE', 'NFLX', 'CRM', 'CMCSA', 'XOM', 'VZ', 'KO', 'INTC']
@@ -102,8 +109,12 @@ def forecast_algorithm(df, algorithm, forecast_periods):
         forecast = results.forecast(steps=forecast_periods)
     
     elif algorithm == 'Auto ARIMA':
-        model = auto_arima(train, seasonal=True, m=7)
-        forecast = model.predict(n_periods=forecast_periods)
+        if auto_arima_available:
+            model = auto_arima(train, seasonal=True, m=7)
+            forecast = model.predict(n_periods=forecast_periods)
+        else:
+            st.error("Auto ARIMA is not available. Please install pmdarima.")
+            return None
     
     elif algorithm == 'Holt-Winters':
         model = ExponentialSmoothing(train, seasonal_periods=7, trend='add', seasonal='add')
@@ -179,25 +190,25 @@ if df is not None and not df.empty:
         # Perform forecasting for a single algorithm
         try:
             forecast = forecast_algorithm(df, algorithm, forecast_periods)
+            if forecast is not None:
+                # Create the plot
+                fig = create_forecast_plot(df, forecast, algorithm)
+                st.plotly_chart(fig)
 
-            # Create the plot
-            fig = create_forecast_plot(df, forecast, algorithm)
-            st.plotly_chart(fig)
+                # Display key metrics
+                st.subheader('Key Metrics')
+                actual_values = df['y'][-len(forecast):]
+                forecast_values = forecast[:len(actual_values)]
+                mae, rmse, mse, r2, adj_r2, mape, theil_u, dw = calculate_metrics(actual_values, forecast_values)
 
-            # Display key metrics
-            st.subheader('Key Metrics')
-            actual_values = df['y'][-len(forecast):]
-            forecast_values = forecast[:len(actual_values)]
-            mae, rmse, mse, r2, adj_r2, mape, theil_u, dw = calculate_metrics(actual_values, forecast_values)
-
-            st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-            st.write(f"Root Mean Square Error (RMSE): {rmse:.2f}")
-            st.write(f"Mean Squared Error (MSE): {mse:.2f}")
-            st.write(f"R-squared (R2) Score: {r2:.4f}")
-            st.write(f"Adjusted R-squared: {adj_r2:.4f}")
-            st.write(f"Mean Absolute Percentage Error (MAPE): {mape:.2f}%")
-            st.write(f"Theil's U statistic: {theil_u:.4f}")
-            st.write(f"Durbin-Watson statistic: {dw:.4f}")
+                st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
+                st.write(f"Root Mean Square Error (RMSE): {rmse:.2f}")
+                st.write(f"Mean Squared Error (MSE): {mse:.2f}")
+                st.write(f"R-squared (R2) Score: {r2:.4f}")
+                st.write(f"Adjusted R-squared: {adj_r2:.4f}")
+                st.write(f"Mean Absolute Percentage Error (MAPE): {mape:.2f}%")
+                st.write(f"Theil's U statistic: {theil_u:.4f}")
+                st.write(f"Durbin-Watson statistic: {dw:.4f}")
         except Exception as e:
             st.error(f"Error in forecasting: {str(e)}")
 
@@ -209,21 +220,22 @@ if df is not None and not df.empty:
         for algo in algorithm_options[1:]:  # Skip 'All Algos'
             try:
                 forecast = forecast_algorithm(df, algo, forecast_periods)
-                actual_values = df['y'][-len(forecast):]
-                forecast_values = forecast[:len(actual_values)]
-                mae, rmse, mse, r2, adj_r2, mape, theil_u, dw = calculate_metrics(actual_values, forecast_values)
-                
-                comparison_data.append({
-                    'Algorithm': algo,
-                    'MAE': mae,
-                    'RMSE': rmse,
-                    'MSE': mse,
-                    'R2 Score': r2,
-                    'Adj R2': adj_r2,
-                    'MAPE': mape,
-                    'Theil U': theil_u,
-                    'Durbin-Watson': dw
-                })
+                if forecast is not None:
+                    actual_values = df['y'][-len(forecast):]
+                    forecast_values = forecast[:len(actual_values)]
+                    mae, rmse, mse, r2, adj_r2, mape, theil_u, dw = calculate_metrics(actual_values, forecast_values)
+                    
+                    comparison_data.append({
+                        'Algorithm': algo,
+                        'MAE': mae,
+                        'RMSE': rmse,
+                        'MSE': mse,
+                        'R2 Score': r2,
+                        'Adj R2': adj_r2,
+                        'MAPE': mape,
+                        'Theil U': theil_u,
+                        'Durbin-Watson': dw
+                    })
             except Exception as e:
                 st.warning(f"Error in {algo} forecasting: {str(e)}")
         
