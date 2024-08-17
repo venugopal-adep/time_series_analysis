@@ -27,7 +27,6 @@ def get_stock_data(ticker, start_date, end_date):
         df = df.rename(columns={'Date': 'ds', 'Close': 'y'})
         df = df[['ds', 'y']]
         
-        # Remove null values and compress the data
         original_size = len(df)
         df = df.dropna()
         compressed_size = len(df)
@@ -44,20 +43,21 @@ def get_stock_data(ticker, start_date, end_date):
 def create_anomaly_plot(df, anomalies, algorithm):
     fig = go.Figure()
     
-    # Plot actual data as blue bars
-    fig.add_trace(go.Bar(x=df['ds'], y=df['y'], name='Stock Price', marker_color='blue'))
+    # Plot actual data as a line
+    fig.add_trace(go.Scatter(x=df['ds'], y=df['y'], name='Stock Price', mode='lines', line=dict(color='#3366CC')))
     
-    # Plot anomalies as green bars
+    # Plot anomalies as red dots
     anomaly_dates = df['ds'][anomalies]
     anomaly_values = df['y'][anomalies]
-    fig.add_trace(go.Bar(x=anomaly_dates, y=anomaly_values, name='Anomalies', marker_color='green'))
+    fig.add_trace(go.Scatter(x=anomaly_dates, y=anomaly_values, name='Anomalies', mode='markers', marker=dict(color='red', size=8)))
     
     fig.update_layout(
         title=f'Stock Price Anomaly Detection using {algorithm}',
         xaxis_title='Date',
         yaxis_title='Price',
         height=600,
-        barmode='overlay'
+        template='plotly_white',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     return fig
 
@@ -111,45 +111,71 @@ def detect_anomalies(df, algorithm, contamination=0.01):
         persist_ad = PersistAD(c=3.0, side='positive', window=1)
         anomalies = persist_ad.fit_detect(series)
     
-    # Convert anomalies to boolean array and handle NaN values
     if isinstance(anomalies, pd.Series):
         anomalies = anomalies.fillna(False).values
     
     return anomalies
 
+# Set page config
+st.set_page_config(page_title="Stock Anomaly Detector", layout="wide")
+
+# Custom CSS for improved aesthetics
+st.markdown("""
+<style>
+    .reportview-container {
+        background: #f0f2f6
+    }
+    .sidebar .sidebar-content {
+        background: #ffffff
+    }
+    .Widget>label {
+        color: #31333F;
+        font-weight: bold;
+    }
+    .stButton>button {
+        color: #ffffff;
+        background-color: #3366CC;
+        border-radius: 5px;
+    }
+    .stTextInput>div>div>input {
+        border-radius: 5px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Streamlit app
-st.title('Advanced Stock Price Anomaly Detection')
+st.title('🚀 Advanced Stock Price Anomaly Detection')
 
 # Sidebar inputs
-ticker = st.sidebar.text_input('Stock Ticker', value='AAPL')
+with st.sidebar:
+    st.header("Configuration")
+    ticker = st.text_input('Stock Ticker', value='AAPL')
 
-# Add "Select Stock" button
-if st.sidebar.button('Select Random Stock'):
-    all_tickers = us_tickers + indian_tickers
-    ticker = random.choice(all_tickers)
-    st.sidebar.write(f"Randomly selected stock: {ticker}")
+    if st.button('Select Random Stock'):
+        all_tickers = us_tickers + indian_tickers
+        ticker = random.choice(all_tickers)
+        st.write(f"Randomly selected stock: {ticker}")
 
-start_date = st.sidebar.date_input('Start Date', pd.to_datetime('2023-01-01'))
-end_date = st.sidebar.date_input('End Date', pd.to_datetime('2023-12-31'))
+    start_date = st.date_input('Start Date', pd.to_datetime('2023-01-01'))
+    end_date = st.date_input('End Date', pd.to_datetime('2023-12-31'))
 
-# Algorithm selection
-algorithm_options = ['All Algos', 'Isolation Forest', 'One-Class SVM', 'Local Outlier Factor', 
-                     'Elliptic Envelope', 'Z-Score', 'Seasonal Decomposition',
-                     'ADTK Level Shift', 'ADTK Volatility Shift', 'ADTK Seasonal', 'ADTK Persist']
-algorithm = st.sidebar.selectbox('Anomaly Detection Algorithm', algorithm_options)
+    algorithm_options = ['All Algos', 'Isolation Forest', 'One-Class SVM', 'Local Outlier Factor', 
+                         'Elliptic Envelope', 'Z-Score', 'Seasonal Decomposition',
+                         'ADTK Level Shift', 'ADTK Volatility Shift', 'ADTK Seasonal', 'ADTK Persist']
+    algorithm = st.selectbox('Anomaly Detection Algorithm', algorithm_options)
 
-# Contamination factor
-contamination = st.sidebar.slider('Contamination Factor', min_value=0.01, max_value=0.1, value=0.01, step=0.01)
+    contamination = st.slider('Contamination Factor', min_value=0.01, max_value=0.1, value=0.01, step=0.01)
 
 # Fetch stock data
 df, original_size, compressed_size = get_stock_data(ticker, start_date, end_date)
 
 if df is not None and not df.empty:
     # Display data compression information
-    st.subheader('Data Compression')
-    st.write(f"Original number of samples: {original_size}")
-    st.write(f"Compressed number of samples: {compressed_size}")
-    st.write(f"Number of samples removed: {original_size - compressed_size}")
+    st.subheader('📊 Data Compression')
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Original Samples", original_size)
+    col2.metric("Compressed Samples", compressed_size)
+    col3.metric("Samples Removed", original_size - compressed_size)
     
     if algorithm != 'All Algos':
         # Perform anomaly detection for a single algorithm
@@ -158,20 +184,21 @@ if df is not None and not df.empty:
 
             # Create the plot
             fig = create_anomaly_plot(df, anomalies, algorithm)
-            st.plotly_chart(fig)
+            st.plotly_chart(fig, use_container_width=True)
 
             # Display summary
-            st.subheader('Anomaly Detection Summary')
-            st.write(f"Total data points: {len(df)}")
-            st.write(f"Number of anomalies detected: {sum(anomalies)}")
-            st.write(f"Percentage of anomalies: {sum(anomalies)/len(df)*100:.2f}%")
+            st.subheader('🔍 Anomaly Detection Summary')
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Data Points", len(df))
+            col2.metric("Anomalies Detected", sum(anomalies))
+            col3.metric("Percentage of Anomalies", f"{sum(anomalies)/len(df)*100:.2f}%")
 
         except Exception as e:
             st.error(f"Error in anomaly detection: {str(e)}")
 
     else:
         # Perform anomaly detection for all algorithms and create a comparison table
-        st.subheader('Algorithm Comparison')
+        st.subheader('🔬 Algorithm Comparison')
         comparison_data = []
 
         for algo in algorithm_options[1:]:  # Skip 'All Algos'
@@ -195,7 +222,7 @@ if df is not None and not df.empty:
             st.warning("No valid anomaly detection results could be generated for any algorithm.")
 
     # Display raw data
-    st.subheader('Raw Data')
-    st.write(df)
+    st.subheader('📈 Raw Data')
+    st.dataframe(df)
 else:
     st.error(f"No data available for {ticker} in the specified date range.")
