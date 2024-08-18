@@ -1,6 +1,6 @@
 streamlit
 plotly
-numpy
+numpy==1.23.5
 pandas
 scikit-learn
 adtk
